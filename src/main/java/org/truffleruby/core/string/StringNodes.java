@@ -2636,9 +2636,8 @@ public abstract class StringNodes {
 
     }
 
-    @NonStandard
-    @CoreMethod(names = "append", required = 1)
-    public static abstract class StringAppendPrimitiveNode extends CoreMethodArrayArgumentsNode {
+    @Primitive(name = "string_append")
+    public static abstract class StringAppendPrimitiveNode extends PrimitiveArrayArgumentsNode {
 
         @Child private StringAppendNode stringAppendNode = StringNodesFactory.StringAppendNodeGen.create(null, null);
 

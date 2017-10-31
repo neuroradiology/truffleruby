@@ -287,12 +287,12 @@ class String
       while current < bytesize && data[current] != 92  # ?\\
         current += 1
       end
-      result.append(byteslice(index, current - index))
+      Truffle.invoke_primitive(:string_append, result, byteslice(index, current - index))
       break if current == bytesize
 
       # found backslash escape, looking next
       if current == bytesize - 1
-        result.append('\\') # backslash at end of string
+        Truffle.invoke_primitive(:string_append, result, '\\') # backslash at end of string
         break
       end
       index = current + 1
@@ -321,7 +321,7 @@ class String
                          i += 1
                        end
                        if i >= bytesize
-                         '\\'.append(cap.chr)
+                         Truffle.invoke_primitive(:string_append, '\\', cap.chr)
                          index += 1
                          next
                        end
@@ -329,12 +329,12 @@ class String
                        name.force_encoding result.encoding
                        match[name]
                      else
-                       '\\'.append(cap.chr)
+                       Truffle.invoke_primitive(:string_append, '\\', cap.chr)
                      end
                    else     # unknown escape
-                     '\\'.append(cap.chr)
+                     Truffle.invoke_primitive(:string_append, '\\', cap.chr)
                    end
-      result.append(additional)
+      Truffle.invoke_primitive(:string_append, result, additional)
       index += 1
     end
   end
@@ -708,7 +708,7 @@ class String
     ret = byteslice(0, 0) # Empty string and string subclass
 
     if match
-      ret.append match.pre_match
+      Truffle.invoke_primitive(:string_append, ret, match.pre_match)
 
       if use_yield || hash
         duped = dup
@@ -725,12 +725,12 @@ class String
 
         tainted ||= val.tainted?
 
-        ret.append val
+        Truffle.invoke_primitive(:string_append, ret, val)
       else
         replacement.to_sub_replacement(ret, match)
       end
 
-      ret.append(match.post_match)
+      Truffle.invoke_primitive(:string_append, ret, match.post_match)
       tainted ||= val.tainted?
     else
       return nil
@@ -886,7 +886,7 @@ class String
     end
 
     Rubinius::Type.infect(self, other)
-    append(other)
+    Truffle.invoke_primitive(:string_append, self, other)
   end
 
   def chr
