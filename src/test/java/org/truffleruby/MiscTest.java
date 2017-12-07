@@ -87,7 +87,7 @@ public class MiscTest {
 
     @Test
     public void testFiberFromIntegratorThread() throws InterruptedException {
-        try (Context context = Context.newBuilder().allowCreateThread(true).build()) {
+        try (Context context = Context.newBuilder().allowCreateThread(false).build()) {
             context.eval("ruby", ":init");
 
             Thread thread = new Thread(() -> {

@@ -9,6 +9,7 @@
  */
 package org.truffleruby.core.thread;
 
+import com.oracle.truffle.api.TruffleContext;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.interop.TruffleObject;
 import com.oracle.truffle.api.nodes.Node;
@@ -98,7 +99,7 @@ public class ThreadManager {
     }
 
     public Thread createJavaThread(Runnable runnable) {
-        final Thread thread = context.getEnv().createThread(runnable);
+        final Thread thread = new Thread(runnable);
         rubyManagedThreads.add(thread);
         return thread;
     }
@@ -217,6 +218,8 @@ public class ThreadManager {
     private void threadMain(DynamicObject thread, Node currentNode, Supplier<Object> task) {
         assert task != null;
 
+        final TruffleContext truffleContext = context.getEnv().getContext();
+        final Object prev = truffleContext.enter();
         start(thread, Thread.currentThread());
         try {
             final Object result = task.get();
@@ -234,6 +237,7 @@ public class ThreadManager {
         } finally {
             assert Layouts.THREAD.getValue(thread) != null || Layouts.THREAD.getException(thread) != null;
             cleanup(thread, Thread.currentThread());
+            truffleContext.leave(prev);
         }
     }
 

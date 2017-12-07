@@ -34,6 +34,7 @@ import org.truffleruby.language.objects.ObjectIDOperations;
 
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.TruffleContext;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.object.DynamicObject;
 import com.oracle.truffle.api.object.DynamicObjectFactory;
@@ -113,9 +114,15 @@ public class FiberManager {
     }
 
     public void initialize(DynamicObject fiber, DynamicObject block, Node currentNode) {
-        context.getThreadManager().spawnFiber(() -> fiberMain(context, fiber, block, currentNode));
+        final TruffleContext truffleContext = context.getEnv().getContext();
+        truffleContext.leave(null);
+        try {
+            context.getThreadManager().spawnFiber(() -> fiberMain(context, fiber, block, currentNode));
 
-        waitForInitialization(context, fiber, currentNode);
+            waitForInitialization(context, fiber, currentNode);
+        } finally {
+            truffleContext.enter();
+        }
     }
 
     /** Wait for full initialization of the new fiber */
@@ -141,6 +148,8 @@ public class FiberManager {
         final String oldName = thread.getName();
         thread.setName(NAME_PREFIX + " id=" + thread.getId() + " from " + RubyLanguage.fileLine(sourceSection));
 
+        final TruffleContext truffleContext = context.getEnv().getContext();
+        final Object prev = truffleContext.enter();
         start(fiber, thread);
         try {
 
@@ -166,6 +175,7 @@ public class FiberManager {
             sendExceptionToParentFiber(fiber, new RaiseException(context.getCoreExceptions().unexpectedReturn(currentNode)), currentNode);
         } finally {
             cleanup(fiber, thread);
+            truffleContext.leave(prev);
             thread.setName(oldName);
         }
     }
@@ -204,8 +214,15 @@ public class FiberManager {
     private Object[] waitForResume(DynamicObject fiber) {
         assert RubyGuards.isRubyFiber(fiber);
 
-        final FiberMessage message = context.getThreadManager().runUntilResultKeepStatus(null,
-                () -> Layouts.FIBER.getMessageQueue(fiber).take());
+        final FiberMessage message;
+        final TruffleContext truffleContext = context.getEnv().getContext();
+        truffleContext.leave(null);
+        try {
+            message = context.getThreadManager().runUntilResultKeepStatus(null,
+                    () -> Layouts.FIBER.getMessageQueue(fiber).take());
+        } finally {
+            truffleContext.enter();
+        }
 
         setCurrentFiber(fiber);
 
