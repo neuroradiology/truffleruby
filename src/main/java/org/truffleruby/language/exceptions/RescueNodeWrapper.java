@@ -50,30 +50,50 @@ public class RescueNodeWrapper implements InstrumentableFactory<RescueNode> {
             return NodeCost.NONE;
         }
 
-        @SuppressWarnings("deprecation")
         @Override
         public Object execute(VirtualFrame frame) {
-            try {
-                probeNode.onEnter(frame);
-                Object returnValue = delegateNode.execute(frame);
-                probeNode.onReturnValue(frame, returnValue);
-                return returnValue;
-            } catch (Throwable t) {
-                probeNode.onReturnExceptional(frame, t);
-                throw t;
+            Object returnValue;
+            for (;;) {
+                boolean wasOnReturnExecuted = false;
+                try {
+                    probeNode.onEnter(frame);
+                    returnValue = delegateNode.execute(frame);
+                    wasOnReturnExecuted = true;
+                    probeNode.onReturnValue(frame, returnValue);
+                    break;
+                } catch (Throwable t) {
+                    Object result = probeNode.onReturnExceptionalOrUnwind(frame, t, wasOnReturnExecuted);
+                    if (result == ProbeNode.UNWIND_ACTION_REENTER) {
+                        continue;
+                    } else if (result != null) {
+                        returnValue = result;
+                        break;
+                    }
+                    throw t;
+                }
             }
+            return returnValue;
         }
 
-        @SuppressWarnings("deprecation")
         @Override
         public void doExecuteVoid(VirtualFrame frame) {
-            try {
-                probeNode.onEnter(frame);
-                delegateNode.doExecuteVoid(frame);
-                probeNode.onReturnValue(frame, null);
-            } catch (Throwable t) {
-                probeNode.onReturnExceptional(frame, t);
-                throw t;
+            for (;;) {
+                boolean wasOnReturnExecuted = false;
+                try {
+                    probeNode.onEnter(frame);
+                    delegateNode.doExecuteVoid(frame);
+                    wasOnReturnExecuted = true;
+                    probeNode.onReturnValue(frame, null);
+                    break;
+                } catch (Throwable t) {
+                    Object result = probeNode.onReturnExceptionalOrUnwind(frame, t, wasOnReturnExecuted);
+                    if (result == ProbeNode.UNWIND_ACTION_REENTER) {
+                        continue;
+                    } else if (result != null) {
+                        break;
+                    }
+                    throw t;
+                }
             }
         }
 

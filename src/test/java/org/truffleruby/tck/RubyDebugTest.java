@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2017 Oracle and/or its affiliates. All rights reserved. This
+ * Copyright (c) 2015, 2018 Oracle and/or its affiliates. All rights reserved. This
  * code is released under a tri EPL/GPL/LGPL license. You can use it,
  * redistribute it and/or modify it under the terms of the:
  *
@@ -10,6 +10,7 @@
 package org.truffleruby.tck;
 
 import com.oracle.truffle.api.debug.Breakpoint;
+import com.oracle.truffle.api.debug.DebugScope;
 import com.oracle.truffle.api.debug.DebugStackFrame;
 import com.oracle.truffle.api.debug.DebugValue;
 import com.oracle.truffle.api.debug.Debugger;
@@ -32,7 +33,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.util.ArrayList;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.assertEquals;
@@ -177,6 +180,37 @@ public class RubyDebugTest {
         assertExecutedOK("Stepping went OK");
     }
 
+    @Test
+    public void testReenterArgumentsAndValues() throws Throwable {
+        // Test that after a re-enter, arguments are kept and variables are cleared.
+        final Source source = createReenterValuesTest();
+
+        run.addLast(() -> {
+            assertNull(suspendedEvent);
+            assertNotNull(debuggerSession);
+            debuggerSession.install(Breakpoint.newBuilder(source).lineIs(12).build());
+        });
+        engine.eval(source);
+
+        // TODO: assertArguments(12, "x = n + m", "n", "11", "m", "20");
+        assertLocation(12, "x = n + m", "n", "11", "m", "20", "x", "nil");
+        stepOver(4);
+        // TODO: assertArguments(16, "x = x + n * m", "n", "11", "m", "20");
+        assertLocation(16, "x", "n", "9", "m", "10", "x", "121");
+        run.addLast(() -> suspendedEvent.prepareUnwindFrame(suspendedEvent.getTopStackFrame()));
+        // TODO: assertArguments(21, "res = fnc(i = i + 1, 20)");
+        assertLocation(21, "res = fnc(i = i + 1, 20)", "i", "11", "res", "nil");
+        continueExecution();
+        // TODO: assertArguments(12, "x = n + m", "n", "11", "m", "20");
+        assertLocation(12, "x = n + m", "n", "11", "m", "20", "x", "nil");
+        continueExecution();
+
+        performWork();
+        Value value = engine.findGlobalSymbol("main").execute();
+        assertEquals(121, value.as(Number.class).intValue());
+        assertExecutedOK("Unwind O.K.");
+    }
+
     private void performWork() {
         try {
             if (ex == null && !run.isEmpty()) {
@@ -200,6 +234,29 @@ public class RubyDebugTest {
         run.addLast(() -> suspendedEvent.prepareStepInto(size));
     }
 
+    private void assertArguments(final int line, final String code, final String... expectedArgs) {
+        run.addLast(() -> {
+            final DebugStackFrame frame = suspendedEvent.getTopStackFrame();
+            DebugScope scope = frame.getScope();
+
+            int n = expectedArgs.length/2;
+            List<DebugValue> actualValues = new ArrayList<>(n);
+            if (scope.getArguments() != null) {
+                scope.getArguments().forEach((x) -> actualValues.add(x));
+            }
+
+            assertEquals(line + ": " + code, n, actualValues.size());
+
+            for (int i = 0; i < n; i++) {
+                int i2 = i << 1;
+                assertEquals(expectedArgs[i2], actualValues.get(i).getName());
+                assertEquals(expectedArgs[i2 + 1], actualValues.get(i).as(String.class));
+            }
+
+            run.removeFirst().run();
+        });
+    }
+
     private void assertLocation(final int line, final String code, final Object... expectedFrame) {
         run.addLast(() -> {
             assertNotNull(suspendedEvent);
@@ -210,7 +267,7 @@ public class RubyDebugTest {
             final DebugStackFrame frame = suspendedEvent.getTopStackFrame();
 
             final AtomicInteger numFrameVars = new AtomicInteger(0);
-            frame.forEach(var -> { numFrameVars.incrementAndGet(); });
+            frame.getScope().getDeclaredValues().forEach(var -> { numFrameVars.incrementAndGet(); });
             // There is (self) among the variables, hence substract 1:
             assertEquals(expectedFrame.length / 2, numFrameVars.get() - 1);
 
@@ -244,6 +301,10 @@ public class RubyDebugTest {
 
     private static Source createFactorial() {
         return getSource("src/test/ruby/factorial.rb");
+    }
+
+    private static Source createReenterValuesTest() {
+        return getSource("src/test/ruby/reenterValues.rb");
     }
 
     private final String getErr() {
