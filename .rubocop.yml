@@ -6,6 +6,7 @@ AllCops:
   Exclude:
     - 'lib/truffle/date/format.rb' # crashes Rubocop in VariableForce
     - 'lib/truffle/date/delta/parser.rb' # generated code
+    - 'src/test/ruby/reenterValues.rb' # unusual test code
 
 # Department 'Lint' (58):
 Lint/AmbiguousOperator:
